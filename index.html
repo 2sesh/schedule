@@ -378,9 +378,10 @@
 
   function shortStatus(entry,start,end,now){
     const typeLabel = entry.absenceType==='vacation' ? 'У відпустці' : 'На лікарняному';
+    const typeLabelFuture = entry.absenceType==='vacation' ? 'У відпустку' : 'На лікарняний';
     if(now < start){
       const d = diffDays(start, now);
-      return {active:false, text:'Через '+d+' '+daysWord(d)};
+      return {active:false, text:typeLabelFuture+' через '+d+' '+daysWord(d)};
     }
     if(!end){
       return {active:true, text:typeLabel+' · дата повернення уточнюється'};
