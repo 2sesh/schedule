@@ -357,7 +357,7 @@
     }
     const list = state.entries.filter(function(e){ return e.clinic === state.activeClinic; });
     if(list.length === 0){
-      container.innerHTML = '<p class="empty-state">Наразі немає записів для цієї клініки.</p>';
+      container.innerHTML = '<p class="empty-state">Наразі немає ні відпусток, ні лікарняних.</p>';
       return;
     }
     const now = todayMidnight();
@@ -370,7 +370,7 @@
     // якщо дата "по" невідома — вважати завершеним не можна, тож такий запис лишається видимим
     const visible = list.filter(function(e){ return statusRank(e) !== 2; });
     if(visible.length === 0){
-      container.innerHTML = '<p class="empty-state">Наразі немає записів для цієї клініки.</p>';
+      container.innerHTML = '<p class="empty-state">Наразі немає ні відпусток, ні лікарняних.</p>';
       return;
     }
     visible.sort(function(a,b){
