@@ -8,7 +8,7 @@
 <style>
   :root{
     --bg:#FFFFFF; --surface:#FFFFFF;
-    --card-a:#FFFFFF; --card-b:#ECECEF; --card-border:#E1E1E6;
+    --card-a:#FFFFFF; --card-b:#ECECEF; --card-border:#E1E1E6; --card-border-strong:#C7C7CC;
     --ink:#1D1D1F; --ink-secondary:#55555A; --separator:#E3E3E8;
     --fill:rgba(120,120,128,0.14);
     --accent:#007AFF; --accent-soft:rgba(0,122,255,0.08); --success:#248A3D; --danger:#D70015; --on-accent:#FFFFFF;
@@ -42,15 +42,15 @@
 
   .segmented{position:relative; display:flex; flex-wrap:wrap; gap:3px; background:var(--fill); border-radius:10px; padding:3px; margin:22px 0;}
   .segmented.hidden{display:none;}
-  .segmented-thumb{position:absolute; background:var(--surface); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.12); transition:left .28s cubic-bezier(.4,0,.2,1), top .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1);}
-  .segment{flex:0 0 auto; position:relative; z-index:1; background:none; border:none; padding:9px 14px; font-size:0.85rem; line-height:1.25; font-weight:500; color:var(--ink-secondary); cursor:pointer; border-radius:8px; text-align:center; white-space:nowrap; -webkit-tap-highlight-color:transparent;}
-  .segment.active{color:var(--ink); font-weight:600;}
+  .segmented-thumb{position:absolute; background:var(--accent); border-radius:8px; box-shadow:0 2px 8px rgba(0,122,255,0.35); transition:left .28s cubic-bezier(.4,0,.2,1), top .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1);}
+  .segment{flex:0 0 auto; position:relative; z-index:1; background:none; border:none; padding:9px 14px; font-size:0.85rem; line-height:1.25; font-weight:500; color:var(--ink-secondary); cursor:pointer; border-radius:8px; text-align:center; white-space:nowrap; -webkit-tap-highlight-color:transparent; transition:color .18s ease;}
+  .segment.active{color:var(--on-accent); font-weight:600;}
   .segment:active{opacity:0.55;}
   .segment:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 
   .cards{display:flex; flex-direction:column; gap:14px;}
   .card{border:1px solid var(--card-border); border-radius:16px; padding:18px;}
-  .card:nth-child(odd){background:var(--card-a);}
+  .card:nth-child(odd){background:var(--card-a); border-color:var(--card-border-strong);}
   .card:nth-child(even){background:var(--card-b);}
 
   .card-status{display:flex; align-items:center; gap:6px; margin:0 0 6px; font-size:0.86rem; font-weight:500; color:var(--ink-secondary);}
@@ -152,21 +152,27 @@
   function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
   function shortStatus(entry,start,end,now){
+    const word = entry.gender==='m' ? 'відсутній' : 'відсутня';
     if(now < start){
       const d = diffDays(start, now);
       return {active:false, text:'Через '+d+' '+daysWord(d)};
-    } else if (now <= end){
+    }
+    if(!end){
+      return {active:true, text:'Наразі '+word+' · дата повернення уточнюється'};
+    }
+    if (now <= end){
       const left = diffDays(end, now);
-      const word = entry.gender==='m' ? 'відсутній' : 'відсутня';
       const tail = left===0 ? 'останній день' : 'ще '+left+' '+daysWord(left);
       return {active:true, text:'Наразі '+word+' · '+tail};
-    } else {
-      return {active:false, text:'Завершено'};
     }
+    return {active:false, text:'Завершено'};
   }
 
   function periodSentence(entry,start,end){
     const verb = entry.absenceType==='vacation' ? 'У відпустці' : 'На лікарняному';
+    if(!end){
+      return verb+' з '+fmtDayYear(start)+' · дата повернення уточнюється';
+    }
     return verb+' з '+fmtDay(start)+' до '+fmtDayYear(end);
   }
 
@@ -192,6 +198,11 @@
 
   function cellVal(row, i){ const c = row.c[i]; return c ? c.v : null; }
 
+  const UA_MONTHS = {
+    'січня':0,'лютого':1,'березня':2,'квітня':3,'травня':4,'червня':5,
+    'липня':6,'серпня':7,'вересня':8,'жовтня':9,'листопада':10,'грудня':11
+  };
+
   function parseFlexibleDate(v){
     if(v===null||v===undefined) return null;
     const s = String(v).trim();
@@ -201,6 +212,8 @@
     if(m) return new Date(+m[3], +m[2]-1, +m[1]);
     m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if(m) return new Date(+m[3], +m[2]-1, +m[1]);
+    m = s.toLowerCase().match(/^(\d{1,2})\s+([а-яіїєґ]+)\s+(\d{4})/);
+    if(m && UA_MONTHS.hasOwnProperty(m[2])) return new Date(+m[3], UA_MONTHS[m[2]], +m[1]);
     return null;
   }
 
@@ -218,7 +231,8 @@
   }
 
   // Columns: A Клініка · B Лікар · C Посада · D Відпустка/лікарняний ·
-  // E Період з · F по · G Дублер · H Посада · I Кабінет · J Записатись · K Амбулаторія
+  // E Період з · F по (можна лишити порожнім, якщо дата ще не відома — і для відпустки, і для лікарняного) ·
+  // G Дублер · H Посада · I Кабінет · J Записатись · K Амбулаторія
   function parseTable(table){
     const entries = [];
     for(const r of table.rows){
@@ -234,7 +248,7 @@
       const room = (cellVal(r,8)||'').toString().trim();
       const bookingUrl = (cellVal(r,9)||'').toString().trim();
       const ambulatory = (cellVal(r,10)||'').toString().trim();
-      if(!clinic || !start || !end) continue;
+      if(!clinic || !start) continue; // дата "по" необов'язкова — для відпустки й лікарняного однаково
       entries.push({clinic:clinic, doctor:doctor, role:role, gender:inferGender(doctor), absenceType:absenceType, start:start, end:end, substitute:substitute, substituteRole:substituteRole, room:room, bookingUrl:bookingUrl, ambulatory:ambulatory});
     }
     return entries;
@@ -348,14 +362,19 @@
     }
     const now = todayMidnight();
     function statusRank(e){
-      if(now >= e.start && now <= e.end) return 0; // вже у відпустці/на лікарняному
+      if(now >= e.start && (!e.end || now <= e.end)) return 0; // вже у відпустці/на лікарняному (включно з ще невідомою датою виходу)
       if(now < e.start) return 1; // ще має піти
       return 2; // вже завершилось
     }
     list.sort(function(a,b){
       const ra = statusRank(a), rb = statusRank(b);
       if(ra !== rb) return ra - rb;
-      if(ra === 0) return a.end - b.end;
+      if(ra === 0){
+        if(!a.end && !b.end) return 0;
+        if(!a.end) return 1; // невідома дата виходу — показуємо після тих, чия дата вже відома
+        if(!b.end) return -1;
+        return a.end - b.end;
+      }
       if(ra === 1) return a.start - b.start;
       return b.end - a.end;
     });
@@ -363,10 +382,10 @@
     list.forEach(function(entry){
       const start = entry.start, end = entry.end;
       const st = shortStatus(entry,start,end,now);
-      const isActive = now>=start && now<=end;
+      const isActive = now>=start && (!end || now<=end);
 
       let progressHtml = '';
-      if(isActive){
+      if(isActive && end){
         const totalSpan = Math.max(1, diffDays(end,start));
         const pct = Math.min(100, Math.max(0, (diffDays(now,start)/totalSpan)*100));
         progressHtml =
