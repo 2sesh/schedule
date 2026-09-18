@@ -173,7 +173,7 @@
     if(!end){
       return verb+' з '+fmtDayYear(start)+' · дата повернення уточнюється';
     }
-    return verb+' з '+fmtDay(start)+' до '+fmtDayYear(end);
+    return verb+' з '+fmtDay(start)+' по '+fmtDayYear(end);
   }
 
   // ---- Live data: Google Visualization API (gviz) JSONP endpoint ----
@@ -366,7 +366,14 @@
       if(now < e.start) return 1; // ще має піти
       return 2; // вже завершилось
     }
-    list.sort(function(a,b){
+    // завершені записи (відома дата "по", яка вже минула) не показуємо взагалі;
+    // якщо дата "по" невідома — вважати завершеним не можна, тож такий запис лишається видимим
+    const visible = list.filter(function(e){ return statusRank(e) !== 2; });
+    if(visible.length === 0){
+      container.innerHTML = '<p class="empty-state">Наразі немає записів для цієї клініки.</p>';
+      return;
+    }
+    visible.sort(function(a,b){
       const ra = statusRank(a), rb = statusRank(b);
       if(ra !== rb) return ra - rb;
       if(ra === 0){
@@ -375,11 +382,10 @@
         if(!b.end) return -1;
         return a.end - b.end;
       }
-      if(ra === 1) return a.start - b.start;
-      return b.end - a.end;
+      return a.start - b.start; // ra === rb === 1 (ще не почалось)
     });
 
-    list.forEach(function(entry){
+    visible.forEach(function(entry){
       const start = entry.start, end = entry.end;
       const st = shortStatus(entry,start,end,now);
       const isActive = now>=start && (!end || now<=end);
