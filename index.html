@@ -8,7 +8,7 @@
 <style>
   :root{
     --bg:#FFFFFF; --surface:#FFFFFF;
-    --card-a:#FFFFFF; --card-b:#F2F2F7; --card-border:#E1E1E6; --card-border-strong:#C7C7CC;
+    --card-a:#FFFFFF; --card-b:#F7F7FA; --card-border:#E1E1E6; --card-border-strong:#C7C7CC;
     --ink:#1D1D1F; --ink-secondary:#55555A; --separator:#E3E3E8;
     --fill:rgba(120,120,128,0.14);
     --accent:#007AFF; --accent-soft:rgba(0,122,255,0.08); --success:#248A3D; --danger:#D70015; --on-accent:#FFFFFF;
@@ -55,15 +55,20 @@
   .cards{display:flex; flex-direction:column; gap:14px;}
   .card{border:1px solid var(--card-border); border-radius:16px; padding:18px;}
   .card:nth-child(odd){background:var(--card-a); border-color:var(--card-border-strong);}
-  .card:nth-child(even){background:var(--card-b);}
+  .card:nth-child(even){background:var(--card-b); border-color:#EDEDF1;}
 
   .card-status{display:flex; align-items:center; gap:6px; margin:0 0 6px; font-size:0.86rem; font-weight:500; color:var(--ink-secondary);}
   .status-dot{width:7px; height:7px; border-radius:50%; background:var(--ink-secondary); flex-shrink:0;}
   .status-dot.active{background:var(--success);}
   .card-status.is-active{color:var(--success);}
 
+  .doctor-head{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+  .doctor-head-text{min-width:0;}
+  .doctor-avatar{position:relative; width:52px; height:52px; border-radius:50%; overflow:hidden; background:var(--accent-soft); flex-shrink:0; display:flex; align-items:center; justify-content:center;}
+  .doctor-avatar-initials{font-size:1rem; font-weight:700; color:var(--accent); line-height:1;}
+  .doctor-avatar img{position:absolute; top:0; left:0; right:0; bottom:0; width:100%; height:100%; object-fit:cover;}
   .card-name{margin:0 0 2px; font-size:1.15rem; font-weight:700; color:var(--ink);}
-  .card-role{margin:0 0 10px; font-size:0.9rem; color:var(--ink-secondary);}
+  .card-role{margin:0; font-size:0.9rem; color:var(--ink-secondary);}
   .card-ambulatory{display:flex; align-items:center; gap:5px; margin:0 0 10px; font-size:0.85rem; color:var(--ink-secondary);}
   .ambulatory-icon{width:12px; height:12px; flex-shrink:0; opacity:0.85;}
   .card-period{margin:0 0 14px; font-size:0.92rem; color:var(--ink);}
@@ -73,9 +78,11 @@
   .progress-labels{display:flex; justify-content:space-between; font-size:0.74rem; color:var(--ink-secondary); margin-bottom:16px;}
 
   .covers{background:var(--accent-soft); border-radius:12px; padding:14px 16px;}
-  .covers-label{margin:0 0 4px; font-size:0.78rem; font-weight:600; color:var(--accent);}
+  .covers-label{display:inline-block; margin:0 0 8px; font-size:0.65rem; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; color:var(--accent); background:var(--surface); border:1px solid var(--accent); border-radius:999px; padding:2px 9px;}
+  .covers-head{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+  .covers-head-text{min-width:0;}
   .covers-name{margin:0 0 2px; font-size:1.05rem; font-weight:700; color:var(--accent);}
-  .covers-role{margin:0 0 12px; font-size:0.87rem; color:var(--ink-secondary);}
+  .covers-role{margin:0; font-size:0.87rem; color:var(--ink-secondary);}
 
   .room-badge{display:inline-flex; align-items:center; gap:5px; background:var(--accent); color:#fff; font-weight:700; font-size:0.82rem; padding:6px 11px; border-radius:999px; white-space:nowrap; margin-bottom:12px;}
   .room-icon{width:13px; height:13px;}
@@ -141,6 +148,210 @@
   const REFRESH_MS = 60*1000;
   const CLINIC_ORDER = ['чорноморськ', 'олександрівськ'];
 
+  // Фото лікарів за ПІБ — редагується прямо тут, у коді, а не в таблиці.
+  // Той самий запис підхоплюється незалежно від того, лікар зараз "у відпустці" чи виступає "дублером" —
+  // достатньо один раз вписати людину сюди. Ім'я має збігатися ТОЧНО так, як воно написане
+  // у стовпцях "Лікар" / "Дублер" самої таблиці (включно з пробілами).
+  // Профілі окремих лікарів "на постійно" — редагується прямо тут, у коді, а не в таблиці.
+  // Кожне поле необов'язкове й підставляється автоматично для людини з таким ПІБ, незалежно від
+  // того, що (або нічого) написано в таблиці — і коли вона сама йде у відпустку/лікарняний,
+  // і коли вона є дублером для когось іншого. Ім'я має збігатися ТОЧНО так, як воно написане
+  // у стовпцях "Лікар" / "Дублер" самої таблиці (включно з пробілами).
+  //   photo                — фото (посилання)
+  //   role                 — посада/спеціальність, підставляється завжди замість стовпця "Посада"
+  //   substituteBookingUrl — посилання "Записатися на прийом", яке показується, коли ця людина
+  //                          виступає дублером (замість стовпця "Записатись")
+  const DOCTOR_PROFILES = {
+    'Алексєєва Олена Василівна': {
+      photo: 'https://lh3.googleusercontent.com/d/12i_se_Iz1Beqiez_eSl0Z81rvWngFvi4',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/ae306a44-0cfb-4039-b7cb-4461e269fa30'
+    },
+    'Андрусенко Світлана Віталіївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1UTJEZ-zrDFrYgGVtniVEJNwNtdtdYrdZ',
+      role: 'Лікар-терапевт',
+      substituteBookingUrl: 'https://helsi.me/doctor/07ba8cfc-1a7a-479d-9de4-92488bd2e2ec'
+    },
+    'Барабанова Ольга Михайлівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1dLJKUYp8M8mIb-7J9ZSoLj--6qVTsJSL',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/857dcbf1-65e1-41ce-ab8f-bebc9bbd827d'
+    },
+    'Бардачова Юлія Миколаївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1ugegdh30ZN6pgW5yaUbtfR_GqyWJS25x',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/a0ff492f-0cc5-48f8-942c-d040b5308d53'
+    },
+    'Батющенко Людмила Іванівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1P5TaklFMdQ-1_W98zd23T8ZTmqmSUBoI',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/6a0972f2-03d9-4c46-9a02-07af3d1d39cb'
+    },
+    'Булкіна Людмила Юріївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1jcOt33IuQdqZ7YPuF2TLpZbK9a61XV0o',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/3921712b-870c-4d85-8417-95c7af7c40b1'
+    },
+    'Даценко Тамара Павлівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1EScCJJSTRJJwZPKUsCs9As4yIpTwYl9-',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/c6f64d44-f35c-4030-91e8-5c6e2412f9cb'
+    },
+    'Денисюк Юлія Олександрівна': {
+      photo: 'https://lh3.googleusercontent.com/d/12i_se_Iz1Beqiez_eSl0Z81rvWngFvi4',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/92b125b5-6f90-425f-a11d-eb2993dfa9a1'
+    },
+    'Доценко Дмитро Валерійович': {
+      photo: 'https://lh3.googleusercontent.com/d/12hAPAjPBsEo2WT-5dYwOkzSMmuLYY_z7',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/702f3afb-fc39-496f-a58a-57fed6f9e95d'
+    },
+    'Емануїлова Олена Євгенівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1oueN859HDvWVqEacLP4f5GDHZjcULird',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/91010e86-98d3-408e-a602-0c9adf81fb96'
+    },
+    'Заславська Олена Володимирівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1t5IxuyXhTjqCwaGYkQYcRc94AW_XmbLb',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/8e166f4d-6af6-43d7-8a63-d343f1b14483'
+    },
+    'Ковальова Майя Іванівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1qfuWo6XWoUV83V0_P2HOwkvOdibd7WvQ',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/fe69148a-4493-4d27-abaa-90e5b5ece472'
+    },
+    'Ковальчук Ірина Віталіївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1H4eG6cO8UGgSLQiqqR3A7L1MUoJLkul5',
+      role: 'Лікар-терапевт',
+      substituteBookingUrl: 'https://helsi.me/doctor/38457878-294f-4662-b4ad-c7b315f06c7e'
+    },
+    'Красовська Євгенія Михайлівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1jTQ1vc9UqE1Q_Y2QjRcNxFfX-mTwpsch',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/22114c6e-f137-44ee-a2ef-95e2322edb01'
+    },
+    'Кривцова Ніна Дмитрівна': {
+      photo: 'https://lh3.googleusercontent.com/d/18iSuadAhLhlwux-RiSAKOd9flTcC0LbC',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/91fa0553-4740-46b6-920a-c668bfabd6ca'
+    },
+    'Курта Ліна Григорівна': {
+      photo: 'https://lh3.googleusercontent.com/d/19244uLn6Kiej_LQggPpIcnf42t47Xx7i',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/8f11b30f-3fca-4903-b725-b837d18db5fe'
+    },
+    'Лімаренкова Наталя Леонідівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1XTj79732zAVjI08hEgyQ43kSr3boI2xD',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/c65fda05-7503-4d14-b5b2-841c51830ade'
+    },
+    'Людвік Тетяна Костянтинівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1XuI61S9BQi5Q0yiQXTO6IsB9zLNIcW0i',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/696921e1-c7c6-418a-9fe4-1db7b748cc32'
+    },
+    'Малишкіна Людмила Костянтинівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1-twLfDfyTwgBPNizfhFqH2JsZ1empPjW',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/dd83d6ab-2335-44c7-8709-2051e39d65be'
+    },
+    'Мальцева Владислава Олегівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1-z27ujECxFHh-Jn_ZhzeM3AJKSDjZZlT',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/e5a7cb51-f489-445a-841a-038980666af4'
+    },
+    'Мартинюк Данна Володимирівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1Rr27j0mSrv8pd9wkGEVgFQp6eeNqyRjj',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/908f354d-28c6-4e35-b876-53672a448857'
+    },
+    'Матюхіна Ірина Анатоліївна': {
+      photo: 'https://lh3.googleusercontent.com/d/16VOYHsnWCdwLCaB1aEPyN_el1D_tI8Vp',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/bf38c135-15ae-4436-99ed-50f08a7f12ef'
+    },
+    'Мелєхова Ольга Валентинівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1n9slP6FVLOOii_iyZeD58vwYC7qy8uYW',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/b2a6736b-830a-4a0c-81a4-bd52f743a8bf'
+    },
+    'Мельник Світлана Федорівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1jDamejAPkFRi_ZyfAD8d5zHJYMlBcwur',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/c7cc8d39-f876-41f1-b8ec-a1bfe160a3d3'
+    },
+    'Мул Галина Олександрівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1ueRfpDYneNr_oaqIhEtJ2Rd8SAcZQLNy',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/60258761-a116-457e-a7c9-3fb1f90ac47f'
+    },
+    'Олейко Олександр Васильович': {
+      photo: 'https://lh3.googleusercontent.com/d/1mQFV0qncPxEcd_tjt2gPuAChHuipARjJ',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/9ea74400-7cca-4e03-83f4-ed092da48959'
+    },
+    'Панасюк Світлана Георгіївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1lz6gEtwMBkKz8HH_G_PcnxJf6vu2r-ED',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/a7358986-0e45-49d5-977b-4b04eaf881ae'
+    },
+    'Полятинчук Ольга Олександрівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1Yksiv1K5YTev1C6o78QDLFHnshZuvJc8',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/894beebe-8544-4010-960d-3ddf82702297'
+    },
+    'Пчелінська Оксана Валентинівна': {
+      photo: 'https://lh3.googleusercontent.com/d/13FpLAi2VJFMvKitAlxAeZMsm3RgHvZUl',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/789819f0-2b2f-4ba4-9f7c-d9b6931c6811'
+    },
+    'Романишин Марія Петрівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1cKcRFNc1cWFG-jXuhrRMWJfiDr4VVf80',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/9629f9f2-0fe6-461f-bc86-6741b1c9608c'
+    },
+    'Сачалелі Тамара Василівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1Gguzz_iIaicLRD1hpiMFXd-bL9rCX5-D',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/fb555810-60b3-4928-9a0f-b005bd01f91f'
+    },
+    'Татарчук Лариса Миколаївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1wvCM9eTrXbzBnEugwI2XB-A_9nVCDIwG',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/32068494-7858-4583-976b-21cdf82c3385'
+    },
+    'Флоренко Олена Володимирівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1HcZmBFGzyLmQkEhIlCuu7G9Q4E4cjCgr',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/bfdb14ce-a425-42aa-b1d8-cbfbf0d223e4'
+    },
+    'Царук Лілія Миколаївна': {
+      photo: 'https://lh3.googleusercontent.com/d/1PBlaRt3bm51MdET3IMKKk4oCboj3dI1X',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/6145b5f6-5270-4015-bf9e-ca3501dca966'
+    },
+    'Цепкова Наталя Вікторівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1wyeL6_1kdAxdrI7eoSMDC4P0KaS8sd1u',
+      role: 'Лікар-педіатр',
+      substituteBookingUrl: 'https://helsi.me/doctor/38840e9f-366a-4d5d-9bf7-93e2bfa5ae87'
+    },
+    'Яремчук Наталія Федорівна': {
+      photo: 'https://lh3.googleusercontent.com/d/1KDZaKsJg1nvxMutXpaujPaiFV_IlMApy',
+      role: 'Лікар загальної практики - сімейний лікар',
+      substituteBookingUrl: 'https://helsi.me/doctor/b89ea97e-6822-496c-aede-c9babe734d62'
+    },
+    'Чорноморська амбулаторія': {
+      photo: 'https://lh3.googleusercontent.com/d/1l_yNOES67mWG68k2RhFDZoMbDdNrWioQ',
+      substituteBookingUrl: 'https://helsi.me/clinic/091be896-5655-4358-a0e7-fe830b613796'
+    }
+  };
+
+  function profileOf(name){
+    return DOCTOR_PROFILES[name] || {};
+  }
+
   function clinicRank(name){
     const lower = (name||'').toLowerCase();
     for(let i=0;i<CLINIC_ORDER.length;i++){
@@ -166,28 +377,27 @@
   function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
   function shortStatus(entry,start,end,now){
-    const word = entry.gender==='m' ? 'відсутній' : 'відсутня';
+    const typeLabel = entry.absenceType==='vacation' ? 'У відпустці' : 'На лікарняному';
     if(now < start){
       const d = diffDays(start, now);
       return {active:false, text:'Через '+d+' '+daysWord(d)};
     }
     if(!end){
-      return {active:true, text:'Наразі '+word+' · дата повернення уточнюється'};
+      return {active:true, text:typeLabel+' · дата повернення уточнюється'};
     }
     if (now <= end){
       const left = diffDays(end, now);
       const tail = left===0 ? 'останній день' : 'ще '+left+' '+daysWord(left);
-      return {active:true, text:'Наразі '+word+' · '+tail};
+      return {active:true, text:typeLabel+' · '+tail};
     }
     return {active:false, text:'Завершено'};
   }
 
-  function periodSentence(entry,start,end){
-    const verb = entry.absenceType==='vacation' ? 'У відпустці' : 'На лікарняному';
+  function periodSentence(start,end){
     if(!end){
-      return verb+' з '+fmtDayYear(start)+' · дата повернення уточнюється';
+      return 'З '+fmtDayYear(start)+' · дата повернення уточнюється';
     }
-    return verb+' з '+fmtDay(start)+' по '+fmtDayYear(end);
+    return 'З '+fmtDay(start)+' по '+fmtDayYear(end);
   }
 
   // ---- Live data: Google Visualization API (gviz) JSONP endpoint ----
@@ -239,31 +449,53 @@
     return 'f';
   }
 
+  function initialsOf(fullName){
+    const parts = (fullName||'').trim().split(/\s+/).filter(Boolean);
+    if(!parts.length) return '';
+    const a = parts[0].charAt(0);
+    const b = parts.length > 1 ? parts[1].charAt(0) : '';
+    return (a+b).toUpperCase();
+  }
+
+  function buildAvatarHtml(name, photoUrl, extraClass){
+    const cls = 'doctor-avatar' + (extraClass ? ' '+extraClass : '');
+    return '<div class="'+cls+'">'+
+        '<span class="doctor-avatar-initials">'+initialsOf(name)+'</span>'+
+        (/^https?:\/\//i.test(photoUrl||'') ? '<img src="'+photoUrl+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '')+
+      '</div>';
+  }
+
   function absenceTypeFrom(v){
     const s = (v||'').toString().trim().toLowerCase();
     return s.startsWith('лікарня') ? 'sick' : 'vacation';
   }
 
-  // Columns: A Клініка · B Лікар · C Посада · D Відпустка/лікарняний ·
-  // E Період з · F по (можна лишити порожнім, якщо дата ще не відома — і для відпустки, і для лікарняного) ·
-  // G Дублер · H Посада · I Кабінет · J Записатись · K Амбулаторія
+  // Схоже, прибрали ОБИДВІ колонки "Посада" (і лікаря, і дублера) — Кабінет тепер на G, а не на H.
+  // Columns (після видалення обох "Посада" — увесь наступний перелік зсунувся на 2 вліво):
+  // A Клініка · B Лікар · C Відпустка/лікарняний ·
+  // D Період з · E по (можна лишити порожнім, якщо дата ще не відома — і для відпустки, і для лікарняного) ·
+  // F Дублер · G Кабінет · H Записатись · K Амбулаторія
+  // (I і J вільні; посада — і лікаря, і дублера — завжди тільки з DOCTOR_PROFILES, бо обидва
+  //  відповідні стовпці видалено з таблиці)
   function parseTable(table){
     const entries = [];
     for(const r of table.rows){
       if(!r.c || !r.c[1] || !r.c[1].v) continue;
       const clinic = (cellVal(r,0)||'').toString().trim();
       const doctor = (cellVal(r,1)||'').toString().trim();
-      const role = (cellVal(r,2)||'').toString().trim();
-      const absenceType = absenceTypeFrom(cellVal(r,3));
-      const start = parseFlexibleDate(cellVal(r,4));
-      const end = parseFlexibleDate(cellVal(r,5));
-      const substitute = (cellVal(r,6)||'').toString().trim();
-      const substituteRole = (cellVal(r,7)||'').toString().trim();
-      const room = (cellVal(r,8)||'').toString().trim();
-      const bookingUrl = (cellVal(r,9)||'').toString().trim();
+      const role = profileOf(doctor).role || '';
+      const absenceType = absenceTypeFrom(cellVal(r,2));
+      const start = parseFlexibleDate(cellVal(r,3));
+      const end = parseFlexibleDate(cellVal(r,4));
+      const substitute = (cellVal(r,5)||'').toString().trim();
+      const substituteRole = profileOf(substitute).role || '';
+      const room = (cellVal(r,6)||'').toString().trim();
+      const bookingUrl = profileOf(substitute).substituteBookingUrl || (cellVal(r,7)||'').toString().trim();
       const ambulatory = (cellVal(r,10)||'').toString().trim();
+      const photoUrl = profileOf(doctor).photo || '';
+      const substitutePhotoUrl = profileOf(substitute).photo || '';
       if(!clinic || !start) continue; // дата "по" необов'язкова — для відпустки й лікарняного однаково
-      entries.push({clinic:clinic, doctor:doctor, role:role, gender:inferGender(doctor), absenceType:absenceType, start:start, end:end, substitute:substitute, substituteRole:substituteRole, room:room, bookingUrl:bookingUrl, ambulatory:ambulatory});
+      entries.push({clinic:clinic, doctor:doctor, role:role, gender:inferGender(doctor), absenceType:absenceType, start:start, end:end, substitute:substitute, substituteRole:substituteRole, room:room, bookingUrl:bookingUrl, ambulatory:ambulatory, photoUrl:photoUrl, substitutePhotoUrl:substitutePhotoUrl});
     }
     return entries;
   }
@@ -421,19 +653,32 @@
         ? '<p class="card-ambulatory"><svg class="ambulatory-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c-4-4-7-7.5-7-11a7 7 0 0 1 14 0c0 3.5-3 7-7 11z"/><circle cx="12" cy="10" r="2.3"/></svg>'+entry.ambulatory+'</p>'
         : '';
 
+      const avatarHtml = buildAvatarHtml(entry.doctor, entry.photoUrl);
+      const substituteAvatarHtml = buildAvatarHtml(entry.substitute, entry.substitutePhotoUrl);
+
       const card = document.createElement('article');
       card.className = 'card';
       card.innerHTML =
         '<p class="card-status'+(isActive?' is-active':'')+'"><span class="status-dot'+(isActive?' active':'')+'"></span>'+st.text+'</p>'+
-        '<h2 class="card-name">'+entry.doctor+'</h2>'+
-        '<p class="card-role">'+entry.role+'</p>'+
+        '<div class="doctor-head">'+
+          avatarHtml+
+          '<div class="doctor-head-text">'+
+            '<h2 class="card-name">'+entry.doctor+'</h2>'+
+            '<p class="card-role">'+entry.role+'</p>'+
+          '</div>'+
+        '</div>'+
         ambulatoryHtml+
-        '<p class="card-period">'+periodSentence(entry,start,end)+'</p>'+
+        '<p class="card-period">'+periodSentence(start,end)+'</p>'+
         progressHtml+
         '<div class="covers">'+
           '<p class="covers-label">Дублер</p>'+
-          '<p class="covers-name">'+entry.substitute+'</p>'+
-          '<p class="covers-role">'+entry.substituteRole+'</p>'+
+          '<div class="covers-head">'+
+            substituteAvatarHtml+
+            '<div class="covers-head-text">'+
+              '<p class="covers-name">'+entry.substitute+'</p>'+
+              '<p class="covers-role">'+entry.substituteRole+'</p>'+
+            '</div>'+
+          '</div>'+
           roomBadge+
           (entry.bookingUrl ? '<a class="cta-button" href="'+entry.bookingUrl+'" target="_blank" rel="noopener noreferrer">Записатися на прийом</a>' : '')+
         '</div>';
