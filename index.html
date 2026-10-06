@@ -7,7 +7,7 @@
 <title>Графік прийому у період тимчасової відсутності лікаря</title>
 <style>
   :root{
-    --bg:#F9F9FA; --surface:#FFFFFF;
+    --bg:#F5F5F7; --surface:#FFFFFF;
     --card-a:#FFFFFF; --card-b:#F7F7FA; --card-border:#E1E1E6; --card-border-strong:#C7C7CC;
     --ink:#1D1D1F; --ink-secondary:#55555A; --separator:#E3E3E8;
     --fill:rgba(120,120,128,0.14);
@@ -82,6 +82,8 @@
   .covers-head-text{min-width:0;}
   .covers-name{margin:0 0 2px; font-size:1.05rem; font-weight:700; color:var(--accent);}
   .covers-role{margin:0; font-size:0.87rem; color:var(--ink-secondary);}
+  .covers-person + .covers-person{margin-top:14px; padding-top:14px; border-top:1px solid rgba(0,122,255,0.18);}
+  .card-pinned .doctor-head{margin-bottom:14px;}
 
   .room-badge{display:inline-flex; align-items:center; gap:5px; background:var(--accent); color:#fff; font-weight:700; font-size:0.82rem; padding:6px 11px; border-radius:999px; white-space:nowrap; margin-bottom:12px;}
   .room-icon{width:13px; height:13px;}
@@ -354,6 +356,33 @@
     return DOCTOR_PROFILES[name] || {};
   }
 
+  // Постійні картки — показуються у вкладці клініки ЗАВЖДИ, незалежно від таблиці
+  // (навіть коли в таблиці для цієї клініки зараз немає жодного запису).
+  // Стоять одразу після діючих відпусток/лікарняних — перед тими, що ще не почалися.
+  // Редагується прямо тут, у коді.
+  //   clinicMatch — частина назви клініки зі стовпця "Клініка" (без урахування регістру)
+  //   clinicName  — назва вкладки, якщо в таблиці зараз немає жодного запису цієї клініки
+  //   doctor      — ПІБ лікаря (фото й посада — з DOCTOR_PROFILES)
+  //   status      — помітка вгорі картки (як "У відпустці" в інших); можна прибрати
+  //   coversLabel — підпис замість "Дублер"
+  //   covers      — хто приймає пацієнтів; ПІБ точно як у DOCTOR_PROFILES
+  //                 (звідти ж фото, посада й посилання "Записатися на прийом")
+  const PINNED_CARDS = [
+    {
+      clinicMatch: 'чорноморськ',
+      clinicName: 'Чорноморська амбулаторія',
+      doctor: 'Доценко Дмитро Валерійович',
+      status: 'У Збройних Силах України',
+      coversLabel: 'Приймають',
+      covers: ['Андрусенко Світлана Віталіївна', 'Ковальчук Ірина Віталіївна']
+    }
+  ];
+
+  function pinnedFor(clinic){
+    const lower = (clinic||'').toLowerCase();
+    return PINNED_CARDS.filter(function(p){ return lower.indexOf(p.clinicMatch) !== -1; });
+  }
+
   function clinicRank(name){
     const lower = (name||'').toLowerCase();
     for(let i=0;i<CLINIC_ORDER.length;i++){
@@ -593,6 +622,48 @@
       '</article>';
   }
 
+  // Один лікар у блоці "Дублер" / "Приймають": фото, ПІБ, посада, кабінет (якщо є) і кнопка запису.
+  function coverPersonHtml(name, role, photoUrl, room, bookingUrl){
+    const roomBadge = room
+      ? '<span class="room-badge"><svg class="room-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c-4-4-7-7.5-7-11a7 7 0 0 1 14 0c0 3.5-3 7-7 11z"/><circle cx="12" cy="10" r="2.3"/></svg>Кабінет '+room+'</span>'
+      : '';
+    return '<div class="covers-person">'+
+        '<div class="covers-head">'+
+          buildAvatarHtml(name, photoUrl)+
+          '<div class="covers-head-text">'+
+            '<p class="covers-name">'+name+'</p>'+
+            '<p class="covers-role">'+role+'</p>'+
+          '</div>'+
+        '</div>'+
+        roomBadge+
+        (bookingUrl ? '<a class="cta-button" href="'+bookingUrl+'" target="_blank" rel="noopener noreferrer">Записатися на прийом</a>' : '')+
+      '</div>';
+  }
+
+  // Постійна картка з PINNED_CARDS — без дат, з поміткою (status) і кількома лікарями, які приймають.
+  function buildPinnedCard(p){
+    const prof = profileOf(p.doctor);
+    const card = document.createElement('article');
+    card.className = 'card card-pinned';
+    card.innerHTML =
+      (p.status ? '<p class="card-status is-active"><span class="status-dot active"></span>'+p.status+'</p>' : '')+
+      '<div class="doctor-head">'+
+        buildAvatarHtml(p.doctor, prof.photo)+
+        '<div class="doctor-head-text">'+
+          '<h2 class="card-name">'+p.doctor+'</h2>'+
+          '<p class="card-role">'+(prof.role||'')+'</p>'+
+        '</div>'+
+      '</div>'+
+      '<div class="covers">'+
+        '<p class="covers-label">'+p.coversLabel+'</p>'+
+        p.covers.map(function(name){
+          const cp = profileOf(name);
+          return coverPersonHtml(name, cp.role||'', cp.photo||'', '', cp.substituteBookingUrl||'');
+        }).join('')+
+      '</div>';
+    return card;
+  }
+
   function renderEntries(){
     const container = document.getElementById('cards');
     container.innerHTML = '';
@@ -606,11 +677,8 @@
       container.innerHTML = '<p class="empty-state">У таблиці поки немає жодного запису.</p>';
       return;
     }
+    const pinned = pinnedFor(state.activeClinic); // постійні картки (PINNED_CARDS) цієї вкладки
     const list = state.entries.filter(function(e){ return e.clinic === state.activeClinic; });
-    if(list.length === 0){
-      container.innerHTML = '<p class="empty-state">Наразі немає ні відпусток, ні лікарняних.</p>';
-      return;
-    }
     const now = todayMidnight();
     function statusRank(e){
       if(now >= e.start && (!e.end || now <= e.end)) return 0; // вже у відпустці/на лікарняному (включно з ще невідомою датою виходу)
@@ -620,7 +688,7 @@
     // завершені записи (відома дата "по", яка вже минула) не показуємо взагалі;
     // якщо дата "по" невідома — вважати завершеним не можна, тож такий запис лишається видимим
     const visible = list.filter(function(e){ return statusRank(e) !== 2; });
-    if(visible.length === 0){
+    if(visible.length === 0 && pinned.length === 0){
       container.innerHTML = '<p class="empty-state">Наразі немає ні відпусток, ні лікарняних.</p>';
       return;
     }
@@ -636,7 +704,7 @@
       return a.start - b.start; // ra === rb === 1 (ще не почалось)
     });
 
-    visible.forEach(function(entry){
+    function buildEntryCard(entry){
       const start = entry.start, end = entry.end;
       const st = shortStatus(entry,start,end,now);
       const isActive = now>=start && (!end || now<=end);
@@ -650,16 +718,11 @@
           '<div class="progress-labels"><span>'+fmtDay(start)+'</span><span>'+fmtDayYear(end)+'</span></div>';
       }
 
-      const roomBadge = entry.room
-        ? '<span class="room-badge"><svg class="room-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c-4-4-7-7.5-7-11a7 7 0 0 1 14 0c0 3.5-3 7-7 11z"/><circle cx="12" cy="10" r="2.3"/></svg>Кабінет '+entry.room+'</span>'
-        : '';
-
       const ambulatoryHtml = entry.ambulatory
         ? '<p class="card-ambulatory"><svg class="ambulatory-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c-4-4-7-7.5-7-11a7 7 0 0 1 14 0c0 3.5-3 7-7 11z"/><circle cx="12" cy="10" r="2.3"/></svg>'+entry.ambulatory+'</p>'
         : '';
 
       const avatarHtml = buildAvatarHtml(entry.doctor, entry.photoUrl);
-      const substituteAvatarHtml = buildAvatarHtml(entry.substitute, entry.substitutePhotoUrl);
 
       const card = document.createElement('article');
       card.className = 'card';
@@ -677,19 +740,15 @@
         progressHtml+
         '<div class="covers">'+
           '<p class="covers-label">Дублер</p>'+
-          '<div class="covers-head">'+
-            substituteAvatarHtml+
-            '<div class="covers-head-text">'+
-              '<p class="covers-name">'+entry.substitute+'</p>'+
-              '<p class="covers-role">'+entry.substituteRole+'</p>'+
-            '</div>'+
-          '</div>'+
-          roomBadge+
-          (entry.bookingUrl ? '<a class="cta-button" href="'+entry.bookingUrl+'" target="_blank" rel="noopener noreferrer">Записатися на прийом</a>' : '')+
+          coverPersonHtml(entry.substitute, entry.substituteRole, entry.substitutePhotoUrl, entry.room, entry.bookingUrl)+
         '</div>';
+      return card;
+    }
 
-      container.appendChild(card);
-    });
+    // порядок: діючі відпустки/лікарняні → постійні картки (PINNED_CARDS) → ті, що ще не почалися
+    visible.filter(function(e){ return statusRank(e) === 0; }).forEach(function(e){ container.appendChild(buildEntryCard(e)); });
+    pinned.forEach(function(p){ container.appendChild(buildPinnedCard(p)); });
+    visible.filter(function(e){ return statusRank(e) === 1; }).forEach(function(e){ container.appendChild(buildEntryCard(e)); });
   }
 
   function ensureActiveTab(){
@@ -710,6 +769,11 @@
       state.entries = entries;
       const seen = [];
       entries.forEach(function(e){ if(seen.indexOf(e.clinic)===-1) seen.push(e.clinic); });
+      // вкладка з постійною карткою є завжди — навіть коли в таблиці немає жодного запису цієї клініки
+      PINNED_CARDS.forEach(function(p){
+        const exists = seen.some(function(c){ return c.toLowerCase().indexOf(p.clinicMatch) !== -1; });
+        if(!exists) seen.push(p.clinicName);
+      });
       seen.sort(function(a,b){ return clinicRank(a) - clinicRank(b); });
       state.clinics = seen;
       ensureActiveTab();
